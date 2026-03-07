@@ -245,7 +245,7 @@ export function Sidebar() {
             <Heart className="h-4 w-4 text-red-500 animate-pulse" />
             <div className="text-center text-xs text-muted-foreground">
               <p className="font-medium">إدارة عيادة المغازى</p>
-              <p className="text-[10px]">الإصدار 1.1.0 - PWA</p>
+              <p className="text-[10px]">الإصدار 1.1.1 - PWA</p>
             </div>
           </div>
         </div>
