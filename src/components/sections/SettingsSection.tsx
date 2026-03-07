@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useAppStore } from '@/lib/store';
 import { usePatients, useVisits, useDoctors } from '@/hooks/useDB';
-import { useBackup, useSync, useDataDeletion } from '@/hooks/useSync';
-import { getAllItems, exportAllData } from '@/lib/db';
+import { useBackup, useSync } from '@/hooks/useSync';
+import { getAllItems, exportAllData, clearStore, deleteItem } from '@/lib/db';
 import { themeConfigs, applyTheme } from '@/lib/themes';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -68,6 +68,8 @@ import {
   Share2,
   Clock,
   Crown,
+  Lock,
+  Unlock,
 } from 'lucide-react';
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
 import { ar } from 'date-fns/locale';
@@ -104,7 +106,6 @@ export function SettingsSection() {
     pushData,
     pullData,
   } = useSync();
-  const { deleteAllData, deleteAllDataAllStores } = useDataDeletion();
 
   const [activeTab, setActiveTab] = useState('sync');
   const [laserTreatments, setLaserTreatments] = useState<LaserTreatment[]>([]);
@@ -251,15 +252,30 @@ export function SettingsSection() {
     }
   };
 
-  // Handle delete store
-  const handleDeleteStore = async () => {
-    if (selectedDeleteStore === 'all') {
-      await deleteAllDataAllStores();
-    } else if (selectedDeleteStore) {
-      await deleteAllData(selectedDeleteStore);
+  // Handle delete store - Fixed version
+  const handleDeleteStore = async (storeId: string) => {
+    try {
+      if (storeId === 'all') {
+        const stores = [
+          'patients', 'visits', 'sessions', 'sessionTypes', 'doctors',
+          'laserTreatments', 'photos', 'files', 'appointments',
+          'expenses', 'revenues', 'prescriptions',
+          'attendance', 'medications', 'prescriptionTemplates'
+        ];
+        for (const store of stores) {
+          await clearStore(store);
+        }
+        addNotification('تم حذف جميع البيانات', 'success');
+      } else {
+        await clearStore(storeId);
+        addNotification('تم حذف البيانات', 'success');
+      }
+      window.dispatchEvent(new CustomEvent('data-updated'));
+      setTimeout(() => window.location.reload(), 500);
+    } catch (error) {
+      console.error('Delete error:', error);
+      addNotification('فشل حذف البيانات', 'error');
     }
-    setSelectedDeleteStore(null);
-    window.location.reload();
   };
 
   // Copy room code
@@ -327,10 +343,11 @@ export function SettingsSection() {
 
       {/* Main Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-4 w-full">
+        <TabsList className="grid grid-cols-5 w-full">
           <TabsTrigger value="sync" className="text-xs md:text-sm">المزامنة</TabsTrigger>
           <TabsTrigger value="reports" className="text-xs md:text-sm">التقارير</TabsTrigger>
           <TabsTrigger value="themes" className="text-xs md:text-sm">المظهر</TabsTrigger>
+          <TabsTrigger value="protection" className="text-xs md:text-sm">الحماية</TabsTrigger>
           <TabsTrigger value="data" className="text-xs md:text-sm">البيانات</TabsTrigger>
         </TabsList>
 
@@ -658,6 +675,76 @@ export function SettingsSection() {
           </Card>
         </TabsContent>
 
+        {/* Protection Tab */}
+        <TabsContent value="protection" className="space-y-4">
+          {/* Password Section */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Lock className="h-5 w-5 text-primary" />
+                كلمة السر
+              </CardTitle>
+              <CardDescription>تغيير كلمة سر الأقسام المحمية</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
+                <div>
+                  <p className="font-medium">كلمة السر الحالية</p>
+                  <p className="text-2xl font-mono font-bold text-primary">2137</p>
+                </div>
+                <Button 
+                  variant="outline"
+                  onClick={() => setShowPasswordDialog(true)}
+                >
+                  <Lock className="h-4 w-4 ml-2" />
+                  تغيير
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Protected Sections */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Shield className="h-5 w-5 text-primary" />
+                الأقسام المحمية
+              </CardTitle>
+              <CardDescription>اختر الأقسام التي تريد حمايتها بكلمة سر</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {[
+                { id: 'doctors', name: 'قسم الأطباء', icon: Stethoscope },
+                { id: 'photos', name: 'صور قبل/بعد', icon: FileText },
+                { id: 'settings', name: 'الإعدادات', icon: Settings },
+              ].map((section) => (
+                <div 
+                  key={section.id}
+                  className="flex items-center justify-between p-3 rounded-lg border"
+                >
+                  <div className="flex items-center gap-3">
+                    {protectedSections.includes(section.id) ? (
+                      <Lock className="h-5 w-5 text-primary" />
+                    ) : (
+                      <Unlock className="h-5 w-5 text-muted-foreground" />
+                    )}
+                    <div>
+                      <p className="font-medium">{section.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {protectedSections.includes(section.id) ? 'محمي بكلمة سر' : 'غير محمي'}
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={protectedSections.includes(section.id)}
+                    onCheckedChange={() => toggleProtection(section.id)}
+                  />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* Data Tab */}
         <TabsContent value="data" className="space-y-4">
           <Card className="border-destructive/20">
@@ -697,10 +784,7 @@ export function SettingsSection() {
                         <AlertDialogCancel>إلغاء</AlertDialogCancel>
                         <AlertDialogAction
                           className="bg-destructive text-destructive-foreground"
-                          onClick={() => {
-                            setSelectedDeleteStore(store.id);
-                            handleDeleteStore();
-                          }}
+                          onClick={() => handleDeleteStore(store.id)}
                         >
                           حذف
                         </AlertDialogAction>
@@ -728,10 +812,7 @@ export function SettingsSection() {
                     <AlertDialogCancel>إلغاء</AlertDialogCancel>
                     <AlertDialogAction
                       className="bg-destructive text-destructive-foreground"
-                      onClick={() => {
-                        setSelectedDeleteStore('all');
-                        handleDeleteStore();
-                      }}
+                      onClick={() => handleDeleteStore('all')}
                     >
                       حذف الكل
                     </AlertDialogAction>
